@@ -30,14 +30,14 @@ st.set_page_config(
     layout="centered"
 )
 
-st.title("🚗 엔카 옵션표 & 사진 수집기")
+st.title("Encar 옵션표 & 사진 수집기")
 
 # --- 입력창 ---
 user_input = st.text_input(
     "엔카 URL 또는 Car ID 입력", 
     value="", 
     placeholder="예: 42153179 또는 엔카 차량 URL",
-    help="차량 ID 숫자를 입력하거나 엔카 매물 URL을 붙여넣으세요."
+    help="CARID 숫자를 입력하거나 엔카 매물 URL을 붙여넣으세요."
 )
 
 if st.button("조회하기", type="primary", use_container_width=True):
@@ -167,7 +167,7 @@ if st.button("조회하기", type="primary", use_container_width=True):
                         st.image(image, use_container_width=True)
                     
                 with tab_photos:
-                    st.subheader("수집된 차량 사진 (1~4번 외관컷 절대 고정)")
+                    st.subheader("수집된 차량 사진 ")
                     if img_urls:
                         for i in range(0, len(img_urls), 2):
                             cols = st.columns(2)
