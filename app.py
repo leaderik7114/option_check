@@ -30,7 +30,7 @@ st.set_page_config(
     layout="centered"
 )
 
-st.title("🚗 엔카 옵션표 & 사진 수집기")
+st.title(" ENCAR 옵션 & 사진 확인")
 
 # --- 입력창 ---
 car_id_input = st.text_input(
