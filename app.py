@@ -46,14 +46,14 @@ if st.button("조회하기", type="primary", use_container_width=True):
     if not clean_id:
         st.warning("올바른 차량 ID(숫자)를 입력해주세요.")
     else:
-        # 옵션 페이지 및 상세 페이지 URL
+        # 지정된 옵션 페이지 및 상세 페이지 URL
         option_url = f"https://fem.encar.com/cars/option/{clean_id}"
         detail_url = f"https://fem.encar.com/cars/detail/{clean_id}"
         
         with st.spinner("옵션표 캡처 및 사진 데이터를 수집 중입니다..."):
             try:
                 option_screenshot_bytes = None
-                img_urls = []
+                raw_img_urls = []
 
                 with sync_playwright() as p:
                     browser = p.chromium.launch(
@@ -88,7 +88,6 @@ if st.button("조회하기", type="primary", use_container_width=True):
                     page.goto(detail_url, wait_until="networkidle", timeout=30000)
                     time.sleep(2)
                     
-                    # 스크롤 동작
                     page.evaluate("window.scrollTo(0, 800)")
                     time.sleep(1)
                     page.evaluate("window.scrollTo(0, 0)")
@@ -96,8 +95,6 @@ if st.button("조회하기", type="primary", use_container_width=True):
                     
                     # DOM 내 모든 img 태그 검색
                     img_elements = page.query_selector_all("img")
-                    
-                    # 제외하고 싶은 키워드 목록 (프로필, 딜러, 아이콘 등)
                     exclude_keywords = ["profile", "dealer", "user", "avatar", "empl", "icon", "logo", "banner"]
 
                     for img in img_elements:
@@ -107,14 +104,10 @@ if st.button("조회하기", type="primary", use_container_width=True):
                             if val:
                                 url_candidate = val.split()[0].strip().lower()
                                 
-                                # 1) 차량 사진 패턴인지 확인
                                 is_car_photo = any(pattern in url_candidate for pattern in ["carpicture", "file.encar.com", "ci.encar.com"])
-                                
-                                # 2) 프로필/딜러/아이콘 키워드가 없는지 확인
                                 is_not_profile = not any(ex in url_candidate for ex in exclude_keywords)
                                 
                                 if is_car_photo and is_not_profile:
-                                    # 원본 URL 복원 (대소문자 유지)
                                     original_val = val.split()[0].strip()
                                     if not original_val.startswith("http"):
                                         if original_val.startswith("//"):
@@ -122,10 +115,21 @@ if st.button("조회하기", type="primary", use_container_width=True):
                                         else:
                                             original_val = "https://fem.encar.com" + original_val
                                             
-                                    if original_val not in img_urls and not original_val.endswith(".gif"):
-                                        img_urls.append(original_val)
+                                    if original_val not in raw_img_urls and not original_val.endswith(".gif"):
+                                        raw_img_urls.append(original_val)
                                 
                     browser.close()
+
+                # --- 💥 [광고 동일 순서 정렬 로직] ---
+                def extract_photo_index(url):
+                    # 파일명 마지막 숫자 패턴 추출 (예: _001.jpg -> 1)
+                    match = re.search(r'[\_\-\.](\d{2,3})\.(?:jpg|png|jpeg)', url, re.IGNORECASE)
+                    if match:
+                        return int(match.group(1))
+                    return 999  # 패턴이 안 맞으면 순서 유지용 맨 뒤 배치
+
+                # 파일명 내 순번 기준 정렬 (숫자가 있는 경우)
+                img_urls = sorted(raw_img_urls, key=extract_photo_index)
 
                 # --- 결과 출력 ---
                 st.success(f"차량 ID [{clean_id}] 수집 완료!")
@@ -139,9 +143,9 @@ if st.button("조회하기", type="primary", use_container_width=True):
                         st.image(image, use_container_width=True)
                     
                 with tab_photos:
-                    st.subheader("수집된 차량 사진")
+                    st.subheader("수집된 차량 사진 (광고 순서 동일)")
                     if img_urls:
-                        # 순서대로 2열 출력
+                        # 2열 순차 배치 (1, 2 -> 3, 4 -> 5, 6)
                         for i in range(0, len(img_urls), 2):
                             cols = st.columns(2)
                             with cols[0]:
