@@ -2,8 +2,9 @@ import sys
 import asyncio
 import os
 import subprocess
+import streamlit as st  # 1. streamlit을 먼저 import 해줍니다!
 
-# Streamlit Cloud (Linux) 환경에서 Playwright 브라우저 자동 설치
+# 2. Streamlit Cloud 브라우저 자동 설치 로직
 @st.cache_resource
 def install_playwright_browsers():
     try:
@@ -13,11 +14,10 @@ def install_playwright_browsers():
 
 install_playwright_browsers()
 
-# Windows 환경 Playwright asyncio 충돌 방지 설정
+# 3. Windows 환경 asyncio 설정
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
-import streamlit as st
 from playwright.sync_api import sync_playwright
 import re
 import time
