@@ -2,9 +2,9 @@ import sys
 import asyncio
 import os
 import subprocess
-import streamlit as st  # 1. streamlit을 먼저 import 해줍니다!
+import streamlit as st
 
-# 2. Streamlit Cloud 브라우저 자동 설치 로직
+# Streamlit Cloud (Linux) 환경에서 Playwright 브라우저 자동 설치
 @st.cache_resource
 def install_playwright_browsers():
     try:
@@ -14,135 +14,112 @@ def install_playwright_browsers():
 
 install_playwright_browsers()
 
-# 3. Windows 환경 asyncio 설정
+# Windows 환경 Playwright asyncio 충돌 방지 설정
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
 from playwright.sync_api import sync_playwright
 import re
 import time
+from PIL import Image
+import io
 
-# -----------------------------------------------------------------------------
-# 1. 페이지 기본 설정
-# -----------------------------------------------------------------------------
+# Page Config (모바일 레이아웃 최적화)
 st.set_page_config(
-    page_title="엔카 모바일 옵션 스냅샷 & 사진 추출기",
+    page_title="엔카 차량 옵션 & 사진 조회",
     page_icon="🚗",
-    layout="wide"
+    layout="centered"
 )
 
-st.title("🚗 엔카 모바일 옵션 스크린샷 & 사진 추출기")
-st.write("왼쪽에는 **원본 사이즈 모바일 옵션 스크린샷**, 오른쪽에는 **차량 사진 목록**이 배치됩니다.")
+st.title("🚗 엔카 차량 옵션 & 사진 수집기")
 
-# -----------------------------------------------------------------------------
-# 2. 사용자 입력
-# -----------------------------------------------------------------------------
-col_input, col_grid, col_width = st.columns([3, 1, 1])
-with col_input:
-    car_id_input = st.text_input(
-        "엔카 Car ID 입력", 
-        value="42153179", 
-        placeholder="예: 42153179",
-        help="엔카 주소창의 숫자로 된 차량 ID를 입력하세요."
-    )
-with col_grid:
-    grid_cols = st.selectbox("우측 사진 열 배치", [2, 3, 4], index=1)
-with col_width:
-    img_width = st.number_input("스크린샷 너비(px)", min_value=200, max_value=600, value=350, step=10)
+# 입력창 (value=""로 기본값 비움)
+car_id_input = st.text_input(
+    "엔카 Car ID 입력", 
+    value="", 
+    placeholder="예: 42153179",
+    help="엔카 차량 상세 URL의 carid 숫자를 입력하세요."
+)
 
-
-# -----------------------------------------------------------------------------
-# 3. Playwright 2단계 수집 함수
-# -----------------------------------------------------------------------------
-def capture_encar_mobile(car_id_str):
-    option_url = f"https://fem.encar.com/cars/option/{car_id_str}"
-    detail_url = f"https://fem.encar.com/cars/detail/{car_id_str}"
-    
-    screenshot_bytes = None
-    img_urls = []
-    
-    try:
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            
-            # 모바일(iPhone 13) 환경 설정
-            context = browser.new_context(
-                viewport={"width": 390, "height": 844},
-                user_agent="Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1"
-            )
-            
-            page = context.new_page()
-            
-            # 1단계: /option 스크린샷 캡처
-            page.goto(option_url, wait_until="domcontentloaded", timeout=30000)
-            time.sleep(2)
-            screenshot_bytes = page.screenshot(full_page=True)
-            
-            # 2단계: /detail 사진 URL 수집
-            page.goto(detail_url, wait_until="domcontentloaded", timeout=30000)
-            time.sleep(1.5)
-            
-            rendered_html = page.content()
-            photo_matches = re.findall(r'(/carpicture/[^\s"\'\\]+\.(?:jpg|jpeg|png))', rendered_html, re.IGNORECASE)
-            for path in photo_matches:
-                img_urls.append(f"https://ci.encar.com{path}")
-
-            browser.close()
-            
-    except Exception as e:
-        st.error(f"브라우저 실행 중 오류 발생: {e}")
-
-    img_urls = list(dict.fromkeys(img_urls))
-    return screenshot_bytes, img_urls
-
-
-# -----------------------------------------------------------------------------
-# 4. 실행 및 양갈래 레이아웃 출력
-# -----------------------------------------------------------------------------
-if st.button("옵션 캡처 & 사진 가져오기", type="primary"):
-    clean_id = car_id_input.strip()
+if st.button("조회하기", type="primary", use_container_width=True):
+    clean_id = re.sub(r"\D", "", car_id_input)
     
     if not clean_id:
-        st.warning("Car ID를 입력해 주세요.")
+        st.warning("올바른 차량 ID(숫자)를 입력해주세요.")
     else:
-        with st.spinner("가상 브라우저가 옵션 캡처 및 사진을 수집 중입니다 (약 4~6초 소요)..."):
-            screenshot_bytes, img_urls = capture_encar_mobile(clean_id)
-            
-            if screenshot_bytes or img_urls:
-                st.success(f"매물 ID `{clean_id}` 수집 완료!")
-                st.markdown(f"🔗 [엔카 옵션 페이지 직접 열기](https://fem.encar.com/cars/option/{clean_id})")
-                st.divider()
+        with st.spinner("엔카 데이터를 가져오는 중입니다... (약 10~15초 소요)"):
+            try:
+                target_url = f"https://fem.encar.com/cars/detail/{clean_id}"
+                
+                with sync_playwright() as p:
+                    browser = p.chromium.launch(
+                        headless=True,
+                        args=["--no-sandbox", "--disable-dev-shm-usage"]
+                    )
+                    # 모바일 에뮬레이션 설정 (iPhone 12 크기)
+                    context = browser.new_context(
+                        viewport={"width": 390, "height": 844},
+                        user_agent="Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1"
+                    )
+                    page = context.new_page()
+                    
+                    # 1. 페이지 이동
+                    page.goto(target_url, wait_until="networkidle", timeout=30000)
+                    time.sleep(2)  # 기본 스크립트 실행 대기
+                    
+                    # 2. 지연 로딩 요소를 유도하기 위한 스크롤 다운/업
+                    page.evaluate("window.scrollTo(0, document.body.scrollHeight / 3)")
+                    time.sleep(1)
+                    page.evaluate("window.scrollTo(0, document.body.scrollHeight / 2)")
+                    time.sleep(1)
+                    
+                    # 3. 옵션 관련 요소가 로드될 때까지 렌더링 대기
+                    # (엔카 모바일 페이지의 주요 셀렉터 대기)
+                    try:
+                        page.wait_for_selector(".DetailOption", timeout=5000)
+                    except Exception:
+                        pass # 셀렉터 이름이 달라져도 계속 진행
+                    
+                    time.sleep(1.5) # 최종 렌더링 안정화 대기
+                    
+                    # 4. 옵션표 캡처 (전체 페이지 또는 지정 스크롤 위치)
+                    option_screenshot_bytes = page.screenshot(full_page=False)
+                    
+                    # 5. 차량 이미지 URL 수집
+                    # 엔카 모바일 페이지 이미지 추출
+                    img_elements = page.query_selector_all("img")
+                    img_urls = []
+                    for img in img_elements:
+                        src = img.get_attribute("src") or img.get_attribute("data-src")
+                        if src and ("carpicture" in src or "file.encar.com" in src):
+                            if not src.startswith("http"):
+                                src = "https:" + src
+                            if src not in img_urls:
+                                img_urls.append(src)
+                                
+                    browser.close()
 
-                # 화면 비율 조정 (왼쪽 4 : 오른쪽 6)
-                col_left, col_right = st.columns([4, 6], gap="large")
-
-                # -------------------------------------------------------------
-                # [왼쪽 컬럼] 모바일 옵션 스크린샷 (고정 너비)
-                # -------------------------------------------------------------
-                with col_left:
-                    st.subheader("📱 엔카 모바일 옵션 스크린샷")
-                    if screenshot_bytes:
-                        # width=img_width를 주어 화면 맞춤 확대 방지 (기본 350px)
-                        st.image(screenshot_bytes, caption="실제 모바일 크기 스크린샷", width=img_width)
-                        
-                        st.download_button(
-                            label="🖼️ 옵션 스크린샷 다운로드",
-                            data=screenshot_bytes,
-                            file_name=f"encar_option_{clean_id}.png",
-                            mime="image/png"
-                        )
-                    else:
-                        st.warning("옵션 스크린샷을 찍지 못했습니다.")
-
-                # -------------------------------------------------------------
-                # [오른쪽 컬럼] 차량 사진 목록
-                # -------------------------------------------------------------
-                with col_right:
-                    st.subheader(f"🖼️ 차량 사진 목록 (총 {len(img_urls)}장)")
+                # --- 결과 출력 UI (탭 분리 모바일 최적화) ---
+                st.success(f"차량 ID [{clean_id}] 데이터 수집 완료!")
+                
+                # 모바일 화면을 위해 탭으로 옵션과 사진 분리
+                tab_option, tab_photos = st.tabs(["📋 옵션 표 캡처", f"📸 차량 사진 ({len(img_urls)}장)"])
+                
+                with tab_option:
+                    st.subheader("차량 옵션표 캡처")
+                    image = Image.open(io.BytesIO(option_screenshot_bytes))
+                    st.image(image, use_column_width=True)
+                    
+                with tab_photos:
+                    st.subheader("수집된 차량 사진")
                     if img_urls:
-                        photo_cols = st.columns(grid_cols)
+                        # 모바일에서는 2열 배치가 가장 보기 좋습니다.
+                        cols = st.columns(2)
                         for idx, url in enumerate(img_urls):
-                            with photo_cols[idx % grid_cols]:
-                                st.image(url, caption=f"사진 {idx+1}", use_container_width=True)
+                            with cols[idx % 2]:
+                                st.image(url, use_column_width=True, caption=f"사진 {idx+1}")
                     else:
-                        st.warning("사진을 읽어오지 못했습니다.")
+                        st.info("추출된 차량 사진이 없습니다.")
+
+            except Exception as e:
+                st.error(f"데이터를 가져오는 중 오류가 발생했습니다: {e}")
