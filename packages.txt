@@ -6,5 +6,4 @@ libasound2
 libxcomposite1
 libxdamage1
 libxrandr2
-libcups2
 libxss1
