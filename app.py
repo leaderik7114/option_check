@@ -46,7 +46,6 @@ if st.button("조회하기", type="primary", use_container_width=True):
     if not clean_id:
         st.warning("올바른 차량 ID(숫자)를 입력해주세요.")
     else:
-        # 지정된 옵션 페이지 및 상세 페이지 URL
         option_url = f"https://fem.encar.com/cars/option/{clean_id}"
         detail_url = f"https://fem.encar.com/cars/detail/{clean_id}"
         
@@ -88,12 +87,13 @@ if st.button("조회하기", type="primary", use_container_width=True):
                     page.goto(detail_url, wait_until="networkidle", timeout=30000)
                     time.sleep(2)
                     
+                    # 천천히 스크롤하여 지연 로딩 사진 유도
                     page.evaluate("window.scrollTo(0, 800)")
                     time.sleep(1)
                     page.evaluate("window.scrollTo(0, 0)")
                     time.sleep(1)
                     
-                    # DOM 내 모든 img 태그 검색
+                    # DOM 순서대로 모든 img 추출
                     img_elements = page.query_selector_all("img")
                     exclude_keywords = ["profile", "dealer", "user", "avatar", "empl", "icon", "logo", "banner"]
 
@@ -120,16 +120,43 @@ if st.button("조회하기", type="primary", use_container_width=True):
                                 
                     browser.close()
 
-                # --- 💥 [광고 동일 순서 정렬 로직] ---
-                def extract_photo_index(url):
-                    # 파일명 마지막 숫자 패턴 추출 (예: _001.jpg -> 1)
-                    match = re.search(r'[\_\-\.](\d{2,3})\.(?:jpg|png|jpeg)', url, re.IGNORECASE)
+                # --- 💥 [외관 1~4번 절대 고정 + 나머지 정렬 파이프라인] ---
+                def extract_number(url):
+                    # _001, _002 등 3자리 번호 파싱
+                    match = re.search(r'[\_\-\.](\d{3})\.(?:jpg|png|jpeg)', url, re.IGNORECASE)
                     if match:
                         return int(match.group(1))
-                    return 999  # 패턴이 안 맞으면 순서 유지용 맨 뒤 배치
+                    return None
 
-                # 파일명 내 순번 기준 정렬 (숫자가 있는 경우)
-                img_urls = sorted(raw_img_urls, key=extract_photo_index)
+                # 1단계: 명확히 _001 ~ _004 번호를 가진 컷 선점
+                fixed_top4 = [None, None, None, None]
+                remains = []
+
+                for url in raw_img_urls:
+                    num = extract_number(url)
+                    if num is not None and 1 <= num <= 4:
+                        fixed_top4[num - 1] = url
+                    else:
+                        remains.append(url)
+
+                # 2단계: 파일명 번호가 없던 경우, DOM에서 최초 검출된 순서대로 1~4번 빈자리 채움
+                final_top4 = []
+                for idx in range(4):
+                    if fixed_top4[idx]:
+                        final_top4.append(fixed_top4[idx])
+                    else:
+                        if remains:
+                            final_top4.append(remains.pop(0))
+
+                # 3단계: 5번 이후 나머지 사진 정렬 (_005, _006... 순서대로)
+                def sort_remains(url):
+                    num = extract_number(url)
+                    return num if num is not None else 999
+
+                sorted_remains = sorted(remains, key=sort_remains)
+
+                # 4단계: 최종 리스트 합치기 (1~4번 고정 + 나머지)
+                img_urls = final_top4 + sorted_remains
 
                 # --- 결과 출력 ---
                 st.success(f"차량 ID [{clean_id}] 수집 완료!")
@@ -143,16 +170,17 @@ if st.button("조회하기", type="primary", use_container_width=True):
                         st.image(image, use_container_width=True)
                     
                 with tab_photos:
-                    st.subheader("수집된 차량 사진 (광고 순서 동일)")
+                    st.subheader("수집된 차량 사진 (1~4번 외관컷 절대 고정)")
                     if img_urls:
-                        # 2열 순차 배치 (1, 2 -> 3, 4 -> 5, 6)
                         for i in range(0, len(img_urls), 2):
                             cols = st.columns(2)
                             with cols[0]:
-                                st.image(img_urls[i], use_container_width=True, caption=f"사진 {i+1}")
+                                caption_text = f"사진 {i+1} (외관 핵심)" if i < 4 else f"사진 {i+1}"
+                                st.image(img_urls[i], use_container_width=True, caption=caption_text)
                             if i + 1 < len(img_urls):
                                 with cols[1]:
-                                    st.image(img_urls[i+1], use_container_width=True, caption=f"사진 {i+2}")
+                                    caption_text = f"사진 {i+2} (외관 핵심)" if (i+1) < 4 else f"사진 {i+2}"
+                                    st.image(img_urls[i+1], use_container_width=True, caption=caption_text)
                     else:
                         st.info("추출된 차량 사진이 없습니다.")
 
