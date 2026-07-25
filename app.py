@@ -88,34 +88,42 @@ if st.button("조회하기", type="primary", use_container_width=True):
                     page.goto(detail_url, wait_until="networkidle", timeout=30000)
                     time.sleep(2)
                     
-                    # 지연 로딩(Lazy Loading) 이미지 유도를 위한 스크롤
+                    # 스크롤 동작
                     page.evaluate("window.scrollTo(0, 800)")
                     time.sleep(1)
                     page.evaluate("window.scrollTo(0, 0)")
                     time.sleep(1)
                     
-                    # DOM 내 모든 img 태그에서 속성별 URL 수집
+                    # DOM 내 모든 img 태그 검색
                     img_elements = page.query_selector_all("img")
+                    
+                    # 제외하고 싶은 키워드 목록 (프로필, 딜러, 아이콘 등)
+                    exclude_keywords = ["profile", "dealer", "user", "avatar", "empl", "icon", "logo", "banner"]
+
                     for img in img_elements:
-                        # src, data-src, data-original 중 들어있는 값 추출
                         possible_attrs = ["src", "data-src", "data-original", "srcset"]
                         for attr in possible_attrs:
                             val = img.get_attribute(attr)
                             if val:
-                                # srcset의 경우 첫 번째 URL만 분리
-                                url_candidate = val.split()[0].strip()
+                                url_candidate = val.split()[0].strip().lower()
                                 
-                                # 엔카 차량 사진 도메인/경로 패턴 체크
-                                if any(pattern in url_candidate for pattern in ["carpicture", "file.encar.com", "ci.encar.com"]):
-                                    if not url_candidate.startswith("http"):
-                                        if url_candidate.startswith("//"):
-                                            url_candidate = "https:" + url_candidate
+                                # 1) 차량 사진 패턴인지 확인
+                                is_car_photo = any(pattern in url_candidate for pattern in ["carpicture", "file.encar.com", "ci.encar.com"])
+                                
+                                # 2) 프로필/딜러/아이콘 키워드가 없는지 확인
+                                is_not_profile = not any(ex in url_candidate for ex in exclude_keywords)
+                                
+                                if is_car_photo and is_not_profile:
+                                    # 원본 URL 복원 (대소문자 유지)
+                                    original_val = val.split()[0].strip()
+                                    if not original_val.startswith("http"):
+                                        if original_val.startswith("//"):
+                                            original_val = "https:" + original_val
                                         else:
-                                            url_candidate = "https://fem.encar.com" + url_candidate
+                                            original_val = "https://fem.encar.com" + original_val
                                             
-                                    # 아이콘 및 아이콘용 gif/png 제외 후 추가
-                                    if url_candidate not in img_urls and not url_candidate.endswith(".gif") and "icon" not in url_candidate:
-                                        img_urls.append(url_candidate)
+                                    if original_val not in img_urls and not original_val.endswith(".gif"):
+                                        img_urls.append(original_val)
                                 
                     browser.close()
 
@@ -133,7 +141,7 @@ if st.button("조회하기", type="primary", use_container_width=True):
                 with tab_photos:
                     st.subheader("수집된 차량 사진")
                     if img_urls:
-                        # 사진 2개씩 순서대로(1,2 -> 3,4 -> 5,6) 출력
+                        # 순서대로 2열 출력
                         for i in range(0, len(img_urls), 2):
                             cols = st.columns(2)
                             with cols[0]:
