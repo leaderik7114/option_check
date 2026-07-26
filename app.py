@@ -123,7 +123,7 @@ if st.button("조회하기", type="primary", use_container_width=True):
                                     url_candidate = val.split()[0].strip().lower()
                                     
                                     is_car_photo = any(pattern in url_candidate for pattern in ["carpicture", "file.encar.com", "ci.encar.com"])
-                                    is_not_profile = not any(ex in url_keyword for ex in exclude_keywords if 'url_keyword' in locals() else ex in url_candidate)
+                                    is_not_profile = not any(ex in url_candidate for ex in exclude_keywords)
                                     
                                     if is_car_photo and is_not_profile:
                                         original_val = val.split()[0].strip()
