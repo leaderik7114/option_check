@@ -4,15 +4,24 @@ import os
 import subprocess
 import streamlit as st
 
-# Streamlit Cloud (Linux) 환경 Playwright 브라우저 설치
-@st.cache_resource
-def install_playwright_browsers():
-    try:
-        subprocess.run(["playwright", "install", "--with-deps", "chromium"], check=True)
-    except Exception as e:
-        print(f"Playwright install error: {e}")
+# --- Page Config (가장 먼저 실행되어야 함) ---
+st.set_page_config(
+    page_title="엔카 옵션표 & 사진 조회",
+    page_icon="🚗",
+    layout="centered"
+)
 
-install_playwright_browsers()
+# Streamlit Cloud (Linux) 환경 Playwright 및 브라우저 바이너리 자동 보장
+@st.cache_resource
+def ensure_playwright_browser():
+    try:
+        import playwright
+        # 브라우저 바이너리 강제 설치 (없거나 깨졌을 때 대비)
+        subprocess.run(["playwright", "install", "chromium"], check=True)
+    except Exception as e:
+        print(f"Playwright browser install note: {e}")
+
+ensure_playwright_browser()
 
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
@@ -22,13 +31,6 @@ import re
 import time
 from PIL import Image
 import io
-
-# --- Page Config ---
-st.set_page_config(
-    page_title="엔카 옵션표 & 사진 조회",
-    page_icon="🚗",
-    layout="centered"
-)
 
 st.title("🚗 엔카 옵션표 & 사진 수집기")
 
@@ -49,15 +51,12 @@ if st.button("조회하기", type="primary", use_container_width=True):
     else:
         # --- 🧠 지능형 URL / Car ID 파싱 로직 ---
         if raw_text.isdigit():
-            # 1. 순수 숫자로만 입력된 경우
             clean_id = raw_text
         else:
-            # 2. URL이 포함된 경우: 엔카 매물 ID 패턴(보통 7~8자리 숫자) 정밀 추출
             match = re.search(r'(?:detail/|car[iI]d=)(\d{6,9})', raw_text)
             if match:
                 clean_id = match.group(1)
             else:
-                # 패턴에 정확히 안 걸릴 경우, 텍스트 내에서 가장 적절한 7~8자리 숫자 추출 시도
                 fallback_match = re.search(r'(\d{7,8})', raw_text)
                 if fallback_match:
                     clean_id = fallback_match.group(1)
@@ -93,7 +92,7 @@ if st.button("조회하기", type="primary", use_container_width=True):
                         )
                         page = context.new_page()
                         
-                        # 1. [옵션표 캡처] https://fem.encar.com/cars/option/{clean_id}
+                        # 1. [옵션표 캡처]
                         page.goto(option_url, wait_until="networkidle", timeout=30000)
                         time.sleep(2)
                         
@@ -104,7 +103,7 @@ if st.button("조회하기", type="primary", use_container_width=True):
                         
                         option_screenshot_bytes = page.screenshot(full_page=True)
                         
-                        # 2. [사진 수집] https://fem.encar.com/cars/detail/{clean_id}
+                        # 2. [사진 수집]
                         page.goto(detail_url, wait_until="networkidle", timeout=30000)
                         time.sleep(2)
                         
@@ -124,7 +123,7 @@ if st.button("조회하기", type="primary", use_container_width=True):
                                     url_candidate = val.split()[0].strip().lower()
                                     
                                     is_car_photo = any(pattern in url_candidate for pattern in ["carpicture", "file.encar.com", "ci.encar.com"])
-                                    is_not_profile = not any(ex in url_candidate for ex in exclude_keywords)
+                                    is_not_profile = not any(ex in url_keyword for ex in exclude_keywords if 'url_keyword' in locals() else ex in url_candidate)
                                     
                                     if is_car_photo and is_not_profile:
                                         original_val = val.split()[0].strip()
