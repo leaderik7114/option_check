@@ -4,7 +4,7 @@ import os
 import re
 import subprocess
 import sys
-import time  # 👈 'time' 모듈 import 추가
+import time
 import requests
 from PIL import Image, ImageDraw
 import streamlit as st
@@ -229,14 +229,10 @@ if st.button("조회하기", type="primary", use_container_width=True):
                     # --- 결과 출력 ---
                     st.success(f"차량 ID [{clean_id}] 수집 완료!")
                     
-                    tab_option, tab_photos = st.tabs(["📋 옵션표 (전체 캡처)", f"📸 차량 사진 ({len(img_urls)}장)"])
+                    # 👈 순서 변경: 차량 사진 탭을 첫 번째로 배치
+                    tab_photos, tab_option = st.tabs([f"📸 차량 사진 ({len(img_urls)}장)", "📋 옵션표 (전체 캡처)"])
                     
-                    with tab_option:
-                        st.subheader("차량 옵션표")
-                        if option_screenshot_bytes:
-                            image = Image.open(io.BytesIO(option_screenshot_bytes))
-                            st.image(image, use_container_width=True)
-                        
+                    # 1. 차량 사진 탭 (첫 번째)
                     with tab_photos:
                         st.subheader("수집된 차량 사진 (1~4번 가이드라인 적용)")
                         if img_urls:
@@ -259,6 +255,13 @@ if st.button("조회하기", type="primary", use_container_width=True):
                                         st.image(display_img, use_container_width=True, caption=caption_text)
                         else:
                             st.info("추출된 차량 사진이 없습니다.")
+
+                    # 2. 옵션표 탭 (두 번째)
+                    with tab_option:
+                        st.subheader("차량 옵션표")
+                        if option_screenshot_bytes:
+                            image = Image.open(io.BytesIO(option_screenshot_bytes))
+                            st.image(image, use_container_width=True)
 
                 except Exception as e:
                     st.error(f"데이터 수집 중 오류가 발생했습니다: {e}")
