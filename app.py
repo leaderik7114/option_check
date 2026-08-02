@@ -4,28 +4,20 @@ import os
 import re
 import subprocess
 import sys
+import time  # 👈 'time' 모듈 import 추가
 import requests
 from PIL import Image, ImageDraw
 import streamlit as st
 
-# --- Page Config (가장 먼저 실행되어야 함) ---
-st.set_page_config(
-    page_title="엔카 옵션표 & 사진 조회",
-    page_icon="🚗",
-    layout="centered"
-)
-
-# Streamlit Cloud (Linux) 환경 Playwright 및 브라우저 바이너리 자동 보장
+# Streamlit Cloud (Linux) 환경 Playwright 브라우저 설치
 @st.cache_resource
-def ensure_playwright_browser():
+def install_playwright_browsers():
     try:
-        import playwright
-        # 브라우저 바이너리 강제 설치 (없거나 깨졌을 때 대비)
-        subprocess.run(["playwright", "install", "chromium"], check=True)
+        subprocess.run(["playwright", "install", "--with-deps", "chromium"], check=True)
     except Exception as e:
-        print(f"Playwright browser install note: {e}")
+        print(f"Playwright install error: {e}")
 
-ensure_playwright_browser()
+install_playwright_browsers()
 
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
@@ -88,6 +80,13 @@ def apply_guidelines(image_input):
     combined = Image.alpha_composite(img, overlay)
     return combined.convert("RGB")
 
+
+# --- Page Config ---
+st.set_page_config(
+    page_title="엔카 옵션표 & 사진 조회",
+    page_icon="🚗",
+    layout="centered"
+)
 
 st.title("🚗 엔카 옵션표 & 사진 수집기")
 
@@ -239,7 +238,7 @@ if st.button("조회하기", type="primary", use_container_width=True):
                             st.image(image, use_container_width=True)
                         
                     with tab_photos:
-
+                        st.subheader("수집된 차량 사진 (1~4번 가이드라인 적용)")
                         if img_urls:
                             for i in range(0, len(img_urls), 2):
                                 cols = st.columns(2)
@@ -248,8 +247,6 @@ if st.button("조회하기", type="primary", use_container_width=True):
                                 with cols[0]:
                                     is_top4 = i < 4
                                     caption_text = f"사진 {i+1} (외관 가이드 적용)" if is_top4 else f"사진 {i+1}"
-                                    
-                                    # 1~4번 사진일 경우에만 가이드라인 그리기
                                     display_img = apply_guidelines(img_urls[i]) if is_top4 else img_urls[i]
                                     st.image(display_img, use_container_width=True, caption=caption_text)
                                 
@@ -258,8 +255,6 @@ if st.button("조회하기", type="primary", use_container_width=True):
                                     with cols[1]:
                                         is_top4 = (i + 1) < 4
                                         caption_text = f"사진 {i+2} (외관 가이드 적용)" if is_top4 else f"사진 {i+2}"
-                                        
-                                        # 1~4번 사진일 경우에만 가이드라인 그리기
                                         display_img = apply_guidelines(img_urls[i+1]) if is_top4 else img_urls[i+1]
                                         st.image(display_img, use_container_width=True, caption=caption_text)
                         else:
