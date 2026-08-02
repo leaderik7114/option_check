@@ -239,11 +239,7 @@ if st.button("조회하기", type="primary", use_container_width=True):
                             st.image(image, use_container_width=True)
                         
                     with tab_photos:
-<<<<<<< HEAD
-# 기존 코드
-=======
-# 병합하려는 코드
->>>>>>> 1aa9d88df0c19e8cad4fa6a08d3ed29941419b54
+
                         if img_urls:
                             for i in range(0, len(img_urls), 2):
                                 cols = st.columns(2)
