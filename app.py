@@ -1,7 +1,11 @@
-import sys
 import asyncio
+import io
 import os
+import re
 import subprocess
+import sys
+import requests
+from PIL import Image, ImageDraw
 import streamlit as st
 
 # Streamlit Cloud (Linux) 환경 Playwright 브라우저 설치
@@ -18,10 +22,63 @@ if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
 from playwright.sync_api import sync_playwright
-import re
-import time
-from PIL import Image
-import io
+
+
+def apply_guidelines(image_input):
+    """
+    이미지에 슬라이드 가이드라인(비율 기준)을 그리는 함수
+    """
+    if isinstance(image_input, str):
+        response = requests.get(image_input, timeout=10)
+        img = Image.open(io.BytesIO(response.content)).convert("RGBA")
+    else:
+        img = image_input.convert("RGBA")
+
+    # 가공용 투명 레이어 생성
+    overlay = Image.new("RGBA", img.size, (255, 255, 255, 0))
+    draw = ImageDraw.Draw(overlay)
+
+    w, h = img.size
+
+    # Slide 기준 크기 (40.2cm x 22.5cm) 대비 비율 좌표 변환
+    SLIDE_W = 40.2
+    SLIDE_H = 22.5
+
+    def x_px(cm): return int((cm / SLIDE_W) * w)
+    def y_px(cm): return int((cm / SLIDE_H) * h)
+
+    # 선 두께 (이미지 해상도에 비례)
+    line_thick = max(2, int(min(w, h) * 0.005))
+
+    # Color 정의 (RGBA)
+    RED = (235, 30, 30, 230)
+    ORANGE = (255, 140, 0, 230)
+    GREEN_LIGHT = (160, 210, 140, 220)
+    GREEN_DARK = (80, 150, 70, 230)
+    PINK = (230, 180, 200, 220)
+
+    # 1. 초록색 수직 가이드선
+    draw.line([(x_px(6.2), 0), (x_px(6.2), h)], fill=GREEN_LIGHT, width=line_thick)
+    draw.line([(x_px(6.8), 0), (x_px(6.8), h)], fill=GREEN_DARK, width=line_thick)
+    draw.line([(x_px(33.5), 0), (x_px(33.5), h)], fill=GREEN_DARK, width=line_thick)
+    draw.line([(x_px(34.1), 0), (x_px(34.1), h)], fill=GREEN_LIGHT, width=line_thick)
+
+    # 2. 핑크색 수평 가이드선
+    draw.line([(0, y_px(10.2)), (w, y_px(10.2))], fill=PINK, width=line_thick)
+    draw.line([(0, y_px(13.0)), (w, y_px(13.0))], fill=PINK, width=line_thick)
+
+    # 3. 주황색 중심선
+    draw.line([(x_px(20.1), 0), (x_px(20.1), h)], fill=ORANGE, width=line_thick + 1)
+    draw.line([(0, y_px(11.6)), (w, y_px(11.6))], fill=ORANGE, width=line_thick + 1)
+
+    # 4. 빨간색 박스 및 하단 구분선
+    draw.rectangle([x_px(5.1), y_px(0.8), x_px(35.2), y_px(22.5)], outline=RED, width=line_thick + 2)
+    draw.line([(0, y_px(20.3)), (w, y_px(20.3))], fill=RED, width=line_thick + 2)
+
+    # 원본 이미지와 가이드라인 레이어 합성
+    combined = Image.alpha_composite(img, overlay)
+    return combined.convert("RGB")
+
 
 # --- Page Config ---
 st.set_page_config(
@@ -49,15 +106,12 @@ if st.button("조회하기", type="primary", use_container_width=True):
     else:
         # --- 🧠 지능형 URL / Car ID 파싱 로직 ---
         if raw_text.isdigit():
-            # 1. 순수 숫자로만 입력된 경우
             clean_id = raw_text
         else:
-            # 2. URL이 포함된 경우: 엔카 매물 ID 패턴(보통 7~8자리 숫자) 정밀 추출
             match = re.search(r'(?:detail/|car[iI]d=)(\d{6,9})', raw_text)
             if match:
                 clean_id = match.group(1)
             else:
-                # 패턴에 정확히 안 걸릴 경우, 텍스트 내에서 가장 적절한 7~8자리 숫자 추출 시도
                 fallback_match = re.search(r'(\d{7,8})', raw_text)
                 if fallback_match:
                     clean_id = fallback_match.group(1)
@@ -93,7 +147,7 @@ if st.button("조회하기", type="primary", use_container_width=True):
                         )
                         page = context.new_page()
                         
-                        # 1. [옵션표 캡처] https://fem.encar.com/cars/option/{clean_id}
+                        # 1. [옵션표 캡처]
                         page.goto(option_url, wait_until="networkidle", timeout=30000)
                         time.sleep(2)
                         
@@ -104,7 +158,7 @@ if st.button("조회하기", type="primary", use_container_width=True):
                         
                         option_screenshot_bytes = page.screenshot(full_page=True)
                         
-                        # 2. [사진 수집] https://fem.encar.com/cars/detail/{clean_id}
+                        # 2. [사진 수집]
                         page.goto(detail_url, wait_until="networkidle", timeout=30000)
                         time.sleep(2)
                         
@@ -136,10 +190,10 @@ if st.button("조회하기", type="primary", use_container_width=True):
                                                 
                                         if original_val not in raw_img_urls and not original_val.endswith(".gif"):
                                             raw_img_urls.append(original_val)
-                                    
+                            
                         browser.close()
 
-                    # --- 💥 [외관 1~4번 절대 고정 + 나머지 정렬 로직] ---
+                    # --- [외관 1~4번 절대 고정 + 나머지 정렬 로직] ---
                     def extract_number(url):
                         match = re.search(r'[\_\-\.](\d{3})\.(?:jpg|png|jpeg)', url, re.IGNORECASE)
                         if match:
@@ -183,17 +237,29 @@ if st.button("조회하기", type="primary", use_container_width=True):
                             st.image(image, use_container_width=True)
                         
                     with tab_photos:
-                        st.subheader("수집된 차량 사진 (1~4번 외관컷 절대 고정)")
+                        st.subheader("수집된 차량 사진 (1~4번 가이드라인 적용)")
                         if img_urls:
                             for i in range(0, len(img_urls), 2):
                                 cols = st.columns(2)
+                                
+                                # 좌측 컬럼
                                 with cols[0]:
-                                    caption_text = f"사진 {i+1} (외관 핵심)" if i < 4 else f"사진 {i+1}"
-                                    st.image(img_urls[i], use_container_width=True, caption=caption_text)
+                                    is_top4 = i < 4
+                                    caption_text = f"사진 {i+1} (외관 가이드 적용)" if is_top4 else f"사진 {i+1}"
+                                    
+                                    # 1~4번 사진일 경우에만 가이드라인 그리기
+                                    display_img = apply_guidelines(img_urls[i]) if is_top4 else img_urls[i]
+                                    st.image(display_img, use_container_width=True, caption=caption_text)
+                                
+                                # 우측 컬럼
                                 if i + 1 < len(img_urls):
                                     with cols[1]:
-                                        caption_text = f"사진 {i+2} (외관 핵심)" if (i+1) < 4 else f"사진 {i+2}"
-                                        st.image(img_urls[i+1], use_container_width=True, caption=caption_text)
+                                        is_top4 = (i + 1) < 4
+                                        caption_text = f"사진 {i+2} (외관 가이드 적용)" if is_top4 else f"사진 {i+2}"
+                                        
+                                        # 1~4번 사진일 경우에만 가이드라인 그리기
+                                        display_img = apply_guidelines(img_urls[i+1]) if is_top4 else img_urls[i+1]
+                                        st.image(display_img, use_container_width=True, caption=caption_text)
                         else:
                             st.info("추출된 차량 사진이 없습니다.")
 
