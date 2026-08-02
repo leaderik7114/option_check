@@ -8,15 +8,24 @@ import requests
 from PIL import Image, ImageDraw
 import streamlit as st
 
-# Streamlit Cloud (Linux) 환경 Playwright 브라우저 설치
-@st.cache_resource
-def install_playwright_browsers():
-    try:
-        subprocess.run(["playwright", "install", "--with-deps", "chromium"], check=True)
-    except Exception as e:
-        print(f"Playwright install error: {e}")
+# --- Page Config (가장 먼저 실행되어야 함) ---
+st.set_page_config(
+    page_title="엔카 옵션표 & 사진 조회",
+    page_icon="🚗",
+    layout="centered"
+)
 
-install_playwright_browsers()
+# Streamlit Cloud (Linux) 환경 Playwright 및 브라우저 바이너리 자동 보장
+@st.cache_resource
+def ensure_playwright_browser():
+    try:
+        import playwright
+        # 브라우저 바이너리 강제 설치 (없거나 깨졌을 때 대비)
+        subprocess.run(["playwright", "install", "chromium"], check=True)
+    except Exception as e:
+        print(f"Playwright browser install note: {e}")
+
+ensure_playwright_browser()
 
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
@@ -79,13 +88,6 @@ def apply_guidelines(image_input):
     combined = Image.alpha_composite(img, overlay)
     return combined.convert("RGB")
 
-
-# --- Page Config ---
-st.set_page_config(
-    page_title="엔카 옵션표 & 사진 조회",
-    page_icon="🚗",
-    layout="centered"
-)
 
 st.title("🚗 엔카 옵션표 & 사진 수집기")
 
@@ -237,7 +239,11 @@ if st.button("조회하기", type="primary", use_container_width=True):
                             st.image(image, use_container_width=True)
                         
                     with tab_photos:
+<<<<<<< HEAD
                         st.subheader("수집된 차량 사진 (1~4번 가이드라인 적용)")
+=======
+                        st.subheader("수집된 차량 사진")
+>>>>>>> 1aa9d88df0c19e8cad4fa6a08d3ed29941419b54
                         if img_urls:
                             for i in range(0, len(img_urls), 2):
                                 cols = st.columns(2)
