@@ -88,11 +88,11 @@ st.set_page_config(
     layout="centered"
 )
 
-st.title("🚗 엔카 옵션표 & 사진 수집기")
+st.title("Encar 광고 사진 & 옵션 리스트")
 
 # --- 입력창 ---
 user_input = st.text_input(
-    "엔카 URL 또는 Car ID 입력", 
+    "엔카 URL 또는 CarID 입력", 
     value="", 
     placeholder="예: 42153179 또는 엔카 차량 URL 전체 복사 붙여넣기",
     help="차량 ID 숫자를 입력하거나 엔카 매물 URL을 통째로 붙여넣으세요."
@@ -120,7 +120,7 @@ if st.button("조회하기", type="primary", use_container_width=True):
                     clean_id = re.sub(r"\D", "", raw_text)
 
         if not clean_id or len(clean_id) < 5:
-            st.error("❌ 올바른 엔카 URL 또는 Car ID를 인식하지 못했습니다. 다시 확인해주세요.")
+            st.error("❌ 올바른 엔카 URL 또는 CarID를 인식하지 못했습니다. 다시 확인해주세요.")
         else:
             option_url = f"https://fem.encar.com/cars/option/{clean_id}"
             detail_url = f"https://fem.encar.com/cars/detail/{clean_id}"
@@ -234,7 +234,7 @@ if st.button("조회하기", type="primary", use_container_width=True):
                     
                     # 1. 차량 사진 탭 (첫 번째)
                     with tab_photos:
-                        st.subheader("수집된 차량 사진 (1~4번 가이드라인 적용)")
+                        st.subheader("광고 노출사진, (외관 가이드 적용)")
                         if img_urls:
                             for i in range(0, len(img_urls), 2):
                                 cols = st.columns(2)
