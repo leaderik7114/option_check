@@ -9,13 +9,13 @@ import requests
 from PIL import Image, ImageDraw
 import streamlit as st
 
-# --- [개선] Streamlit Cloud Playwright 브라우저 정확한 설치 ---
+# --- [수정] --with-deps 제거 (packages.txt로 대체) ---
 @st.cache_resource
 def install_playwright_browsers():
     try:
-        # chromium 및 chromium-headless-shell 바이너리를 시스템 의존성과 함께 강제 설치
+        # --with-deps 옵션을 제거하고 pure chromium 브라우저만 설치
         subprocess.run(
-            [sys.executable, "-m", "playwright", "install", "chromium", "--with-deps"],
+            [sys.executable, "-m", "playwright", "install", "chromium"],
             check=True
         )
     except Exception as e:
@@ -148,8 +148,8 @@ if st.button("조회하기", type="primary", use_container_width=True):
                                 args=["--no-sandbox", "--disable-dev-shm-usage"]
                             )
                         except Exception:
-                            # 만약 브라우저가 누락되어 실행이 안될 경우 현 시점에서 즉시 재설치
-                            subprocess.run([sys.executable, "-m", "playwright", "install", "chromium", "--with-deps"], check=True)
+                            # 브라우저 실행 예외 시 재설치 시도 (동일하게 --with-deps 제거)
+                            subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"], check=True)
                             browser = p.chromium.launch(
                                 headless=True,
                                 args=["--no-sandbox", "--disable-dev-shm-usage"]
