@@ -30,7 +30,8 @@ from playwright.sync_api import sync_playwright
 
 def apply_guidelines(image_input):
     """
-    스크린샷에 표시된 고정 가이드라인 규격(Fix)을 원본 사진 위에 그대로 그리는 함수.
+    1920x1080 표준 해상도 기준으로 완전 고정(Absolute Pixel Fix)된
+    가이드라인을 그리는 함수
     """
     try:
         if isinstance(image_input, str):
@@ -45,52 +46,67 @@ def apply_guidelines(image_input):
     except Exception:
         return image_input
 
-    overlay = Image.new("RGBA", img.size, (255, 255, 255, 0))
+    # 표준 규격 해상도 고정 (1920 x 1080)
+    TARGET_W = 1920
+    TARGET_H = 1080
+    
+    # 해상도가 다를 경우 표준 규격으로 리사이즈
+    if img.size != (TARGET_W, TARGET_H):
+        img = img.resize((TARGET_W, TARGET_H), Image.Resampling.LANCZOS)
+
+    overlay = Image.new("RGBA", (TARGET_W, TARGET_H), (255, 255, 255, 0))
     draw = ImageDraw.Draw(overlay)
 
-    w, h = img.size
+    # --- [1920x1080 기준 절대 픽셀 좌표 (Absolute px Fix)] ---
+    # 1. 수평선 높이 (px)
+    Y_RED_BOTTOM = 950      # 하단 빨간 바퀴 접지선
+    Y_RED_TOP = 20          # 상단 빨간 테두리
+    Y_WHITE_TOP = 470       # 상단 흰색 보조선
+    Y_WHITE_BOT = 610       # 하단 흰색 보조선
+    Y_ORANGE_CENTER = 548   # 수평 중앙 주황선
 
-    # --- [절대 고정 스케일 가이드 좌표 Fix] ---
-    SLIDE_W = 40.2
+    # 2. 수직선 위치 (px) - cm 비율 매핑
+    X_RED_LEFT = 229        # 4.8cm
+    X_RED_RIGHT = 1690      # 35.4cm
+    
+    X_GREEN_1 = 267         # 5.6cm
+    X_GREEN_2 = 311         # 6.5cm
+    X_GREEN_3 = 1580        # 33.1cm
+    X_GREEN_4 = 1614        # 33.8cm
 
-    def x_px(cm): return int((cm / SLIDE_W) * w)
+    X_ORANGE_LEFT = 411     # 8.6cm (중형 좌)
+    X_ORANGE_RIGHT = 1490   # 31.2cm (중형 우)
+    X_ORANGE_CENTER = 946   # 19.8cm (수직 중앙)
 
-    # y축 고정값 비율 (촬영 뷰파인더 픽셀 일치 비율)
-    Y_RED_TOP = int(h * 0.02)         # 상단 빨간 테두리
-    Y_RED_BOTTOM = int(h * 0.88)      # 하단 빨간 바퀴 접지선 (바퀴 하단부에 잘 맞춰짐)
-    Y_WHITE_TOP = int(h * 0.435)      # 상단 흰색 보조선
-    Y_WHITE_BOT = int(h * 0.565)      # 하단 흰색 보조선
-    Y_ORANGE_CENTER = int(h * 0.507)  # 수평 중앙 주황선
+    # Line Style
+    line_thick = 4
 
-    # 선 두께 (해상도 비례)
-    line_thick = max(2, int(min(w, h) * 0.004))
-
-    # Color 정의 (RGBA)
     RED = (235, 35, 35, 230)
     ORANGE = (245, 150, 20, 230)
     GREEN_LIGHT = (160, 210, 140, 220)
     GREEN_DARK = (80, 150, 70, 230)
     WHITE_SUB = (240, 240, 240, 180)
 
-    # 1. 흰색 수평 구도 보조선 (Fix)
-    draw.line([(0, Y_WHITE_TOP), (w, Y_WHITE_TOP)], fill=WHITE_SUB, width=max(1, line_thick - 1))
-    draw.line([(0, Y_WHITE_BOT), (w, Y_WHITE_BOT)], fill=WHITE_SUB, width=max(1, line_thick - 1))
+    # --- [선 그리기] ---
+    # 1. 흰색 보조선
+    draw.line([(0, Y_WHITE_TOP), (TARGET_W, Y_WHITE_TOP)], fill=WHITE_SUB, width=2)
+    draw.line([(0, Y_WHITE_BOT), (TARGET_W, Y_WHITE_BOT)], fill=WHITE_SUB, width=2)
 
-    # 2. 초록색 수직 가이드선 (대형 차량 사이드 맞춤 Fix)
-    draw.line([(x_px(5.6), 0), (x_px(5.6), h)], fill=GREEN_LIGHT, width=line_thick)
-    draw.line([(x_px(6.5), 0), (x_px(6.5), h)], fill=GREEN_DARK, width=line_thick)
-    draw.line([(x_px(33.1), 0), (x_px(33.1), h)], fill=GREEN_DARK, width=line_thick)
-    draw.line([(x_px(33.8), 0), (x_px(33.8), h)], fill=GREEN_LIGHT, width=line_thick)
+    # 2. 초록색 사이드선 (대형)
+    draw.line([(X_GREEN_1, 0), (X_GREEN_1, TARGET_H)], fill=GREEN_LIGHT, width=line_thick)
+    draw.line([(X_GREEN_2, 0), (X_GREEN_2, TARGET_H)], fill=GREEN_DARK, width=line_thick)
+    draw.line([(X_GREEN_3, 0), (X_GREEN_3, TARGET_H)], fill=GREEN_DARK, width=line_thick)
+    draw.line([(X_GREEN_4, 0), (X_GREEN_4, TARGET_H)], fill=GREEN_LIGHT, width=line_thick)
 
-    # 3. 주황색 수직/수평 가이드선 (중형 차량 사이드 & 중앙선 Fix)
-    draw.line([(x_px(8.6), 0), (x_px(8.6), h)], fill=ORANGE, width=line_thick)          # 중형 좌
-    draw.line([(x_px(31.2), 0), (x_px(31.2), h)], fill=ORANGE, width=line_thick)        # 중형 우
-    draw.line([(x_px(19.8), 0), (x_px(19.8), h)], fill=ORANGE, width=line_thick + 1)    # 수직 중앙
-    draw.line([(0, Y_ORANGE_CENTER), (w, Y_ORANGE_CENTER)], fill=ORANGE, width=line_thick + 1) # 수평 중앙
+    # 3. 주황색 사이드선 (중형 & 중앙)
+    draw.line([(X_ORANGE_LEFT, 0), (X_ORANGE_LEFT, TARGET_H)], fill=ORANGE, width=line_thick)
+    draw.line([(X_ORANGE_RIGHT, 0), (X_ORANGE_RIGHT, TARGET_H)], fill=ORANGE, width=line_thick)
+    draw.line([(X_ORANGE_CENTER, 0), (X_ORANGE_CENTER, TARGET_H)], fill=ORANGE, width=line_thick + 1)
+    draw.line([(0, Y_ORANGE_CENTER), (TARGET_W, Y_ORANGE_CENTER)], fill=ORANGE, width=line_thick + 1)
 
-    # 4. 빨간색 외곽 테두리 & 바퀴 하단 접지선 (Fix)
-    draw.rectangle([x_px(4.8), Y_RED_TOP, x_px(35.4), Y_RED_BOTTOM], outline=RED, width=line_thick + 2)
-    draw.line([(0, Y_RED_BOTTOM), (w, Y_RED_BOTTOM)], fill=RED, width=line_thick + 2)
+    # 4. 빨간색 외곽 및 바퀴 하단선
+    draw.rectangle([X_RED_LEFT, Y_RED_TOP, X_RED_RIGHT, Y_RED_BOTTOM], outline=RED, width=line_thick + 2)
+    draw.line([(0, Y_RED_BOTTOM), (TARGET_W, Y_RED_BOTTOM)], fill=RED, width=line_thick + 2)
 
     combined = Image.alpha_composite(img, overlay)
     return combined.convert("RGB")
