@@ -30,7 +30,7 @@ from playwright.sync_api import sync_playwright
 
 def apply_guidelines(image_input):
     """
-    모바일 촬영 가이드라인 화면 기준에 맞춰 사진 영역 위에 보정 선을 그리는 함수
+    엔카 원본 사진(4:3 또는 16:9) 비율에 맞춰 촬영 가이드라인을 정확히 매핑하는 함수
     """
     try:
         if isinstance(image_input, str):
@@ -51,13 +51,6 @@ def apply_guidelines(image_input):
 
     w, h = img.size
 
-    # 모바일 가이드 화면 기준 비율 좌표 정의 (화면 전체 40.2 x 22.5 cm 스케일)
-    SLIDE_W = 40.2
-    SLIDE_H = 22.5
-
-    def x_px(cm): return int((cm / SLIDE_W) * w)
-    def y_px(cm): return int((cm / SLIDE_H) * h)
-
     # 선 두께 (이미지 해상도 비례)
     line_thick = max(2, int(min(w, h) * 0.004))
 
@@ -68,31 +61,33 @@ def apply_guidelines(image_input):
     GREEN_DARK = (80, 150, 70, 230)
     WHITE_SUB = (240, 240, 240, 180)
 
-    # 1. 흰색 수평 구도 보조선 (그릴 위/헤드램프 기준선)
-    draw.line([(0, y_px(9.8)), (w, y_px(9.8))], fill=WHITE_SUB, width=max(1, line_thick - 1))
-    draw.line([(0, y_px(12.7)), (w, y_px(12.7))], fill=WHITE_SUB, width=max(1, line_thick - 1))
+    # ----------------------------------------------------
+    # 모바일 촬영 카메라 프레임 실제 비율 (% 기준 변환)
+    # ----------------------------------------------------
+    # 1. 흰색 보조 수평선 (그릴/라이트 기준선)
+    draw.line([(0, int(h * 0.44)), (w, int(h * 0.44))], fill=WHITE_SUB, width=max(1, line_thick - 1))
+    draw.line([(0, int(h * 0.56)), (w, int(h * 0.56))], fill=WHITE_SUB, width=max(1, line_thick - 1))
 
-    # 2. 초록색 수직 가이드선 (대형 차량 / 외곽 정렬)
-    draw.line([(x_px(5.6), 0), (x_px(5.6), h)], fill=GREEN_LIGHT, width=line_thick)
-    draw.line([(x_px(6.5), 0), (x_px(6.5), h)], fill=GREEN_DARK, width=line_thick)
-    draw.line([(x_px(33.1), 0), (x_px(33.1), h)], fill=GREEN_DARK, width=line_thick)
-    draw.line([(x_px(33.8), 0), (x_px(33.8), h)], fill=GREEN_LIGHT, width=line_thick)
+    # 2. 초록색 수직 가이드선 (대형 차량 / 프레임 외곽)
+    draw.line([(int(w * 0.12), 0), (int(w * 0.12), h)], fill=GREEN_LIGHT, width=line_thick)
+    draw.line([(int(w * 0.15), 0), (int(w * 0.15), h)], fill=GREEN_DARK, width=line_thick)
+    draw.line([(int(w * 0.85), 0), (int(w * 0.85), h)], fill=GREEN_DARK, width=line_thick)
+    draw.line([(int(w * 0.88), 0), (int(w * 0.88), h)], fill=GREEN_LIGHT, width=line_thick)
 
-    # 3. 주황색 수직/수평 중심 가이드선 (중형 차량 맞춤선)
-    draw.line([(x_px(8.6), 0), (x_px(8.6), h)], fill=ORANGE, width=line_thick)
-    draw.line([(x_px(31.2), 0), (x_px(31.2), h)], fill=ORANGE, width=line_thick)
-    draw.line([(x_px(19.8), 0), (x_px(19.8), h)], fill=ORANGE, width=line_thick + 1)  # 차량 중앙 수직선
-    draw.line([(0, y_px(11.4)), (w, y_px(11.4))], fill=ORANGE, width=line_thick + 1)  # 범퍼/그릴 센터선
+    # 3. 주황색 수직/수평 가이드선 (중형 차량 및 정중앙선)
+    draw.line([(int(w * 0.22), 0), (int(w * 0.22), h)], fill=ORANGE, width=line_thick)
+    draw.line([(int(w * 0.78), 0), (int(w * 0.78), h)], fill=ORANGE, width=line_thick)
+    draw.line([(int(w * 0.50), 0), (int(w * 0.50), h)], fill=ORANGE, width=line_thick + 1)  # 차량 수직 중앙선
+    draw.line([(0, int(h * 0.50)), (w, int(h * 0.50))], fill=ORANGE, width=line_thick + 1)  # 차량 수평 센터선
 
-    # 4. 빨간색 외곽 사각형 & 바퀴 하단 수평 접지선
-    # 하단 19.3cm 위치가 바퀴 최하단 수평선에 맞춰집니다.
-    draw.rectangle([x_px(4.8), y_px(0.8), x_px(35.4), y_px(21.7)], outline=RED, width=line_thick + 2)
-    draw.line([(0, y_px(19.3)), (w, y_px(19.3))], fill=RED, width=line_thick + 2)
+    # 4. 빨간색 테두리 박스 & 하단 바퀴 접지 수평선
+    # 하단 빨간선(약 88~90% 지점)이 타이어 바퀴 바닥 접지면에 딱 걸치게 조정
+    draw.rectangle([int(w * 0.08), int(h * 0.03), int(w * 0.92), int(h * 0.97)], outline=RED, width=line_thick + 2)
+    draw.line([(0, int(h * 0.88)), (w, int(h * 0.88))], fill=RED, width=line_thick + 2)
 
     # 원본 이미지와 가이드라인 레이어 합성
     combined = Image.alpha_composite(img, overlay)
     return combined.convert("RGB")
-
 
 # --- Page Config ---
 st.set_page_config(
