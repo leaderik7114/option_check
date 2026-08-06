@@ -30,8 +30,8 @@ from playwright.sync_api import sync_playwright
 
 def apply_guidelines(image_input):
     """
-    사진 전체 테두리가 아닌, 사진 속 '차량 자체의 크기/위치'에 맞춰
-    사이드 및 바퀴 하단 가이드라인을 그리는 함수
+    모바일 촬영 카메라 가이드 프레임의 '절대 고정 규격'을 사진 위에 그리는 함수.
+    차량 크기 검수용 고정 템플릿 역할을 합니다.
     """
     try:
         if isinstance(image_input, str):
@@ -46,53 +46,50 @@ def apply_guidelines(image_input):
     except Exception:
         return image_input
 
+    # 가공용 투명 레이어 생성
     overlay = Image.new("RGBA", img.size, (255, 255, 255, 0))
     draw = ImageDraw.Draw(overlay)
 
     w, h = img.size
-    line_thick = max(2, int(min(w, h) * 0.005))
 
-    # Color 정의
+    # --- [고정 표준 슬라이드 규격 스케일: 40.2cm x 22.5cm] ---
+    SLIDE_W = 40.2
+    SLIDE_H = 22.5
+
+    def x_px(cm): return int((cm / SLIDE_W) * w)
+    def y_px(cm): return int((cm / SLIDE_H) * h)
+
+    # 선 두께
+    line_thick = max(2, int(min(w, h) * 0.004))
+
+    # Color 정의 (RGBA)
     RED = (235, 35, 35, 230)
     ORANGE = (245, 150, 20, 230)
     GREEN_LIGHT = (160, 210, 140, 220)
     GREEN_DARK = (80, 150, 70, 230)
     WHITE_SUB = (240, 240, 240, 180)
 
-    # ----------------------------------------------------
-    # 사진 내부 '차량 영역' 맞춤 좌표 (차체 실측 비율)
-    # ----------------------------------------------------
-    
-    # 1. 차량 전면 수평 보조선 (헤드램프 / 그릴 중앙선)
-    draw.line([(0, int(h * 0.46)), (w, int(h * 0.46))], fill=WHITE_SUB, width=max(1, line_thick - 1))
-    draw.line([(0, int(h * 0.53)), (w, int(h * 0.53))], fill=WHITE_SUB, width=max(1, line_thick - 1))
+    # 1. [고정] 흰색 수평 구도 보조선 (9.8cm, 12.7cm)
+    draw.line([(0, y_px(9.8)), (w, y_px(9.8))], fill=WHITE_SUB, width=max(1, line_thick - 1))
+    draw.line([(0, y_px(12.7)), (w, y_px(12.7))], fill=WHITE_SUB, width=max(1, line_thick - 1))
 
-    # 2. [대형 차량 사이드] 차체 좌/우 실체 끝에 맞춘 초록선
-    # (좌측 범퍼 끝: 약 18%, 우측 후면 범퍼 끝: 약 82%)
-    draw.line([(int(w * 0.18), 0), (int(w * 0.18), h)], fill=GREEN_LIGHT, width=line_thick)
-    draw.line([(int(w * 0.20), 0), (int(w * 0.20), h)], fill=GREEN_DARK, width=line_thick)
-    draw.line([(int(w * 0.80), 0), (int(w * 0.80), h)], fill=GREEN_DARK, width=line_thick)
-    draw.line([(int(w * 0.82), 0), (int(w * 0.82), h)], fill=GREEN_LIGHT, width=line_thick)
+    # 2. [고정] 초록색 수직 가이드선 (대형 차량 사이드 검수용)
+    draw.line([(x_px(5.6), 0), (x_px(5.6), h)], fill=GREEN_LIGHT, width=line_thick)
+    draw.line([(x_px(6.5), 0), (x_px(6.5), h)], fill=GREEN_DARK, width=line_thick)
+    draw.line([(x_px(33.1), 0), (x_px(33.1), h)], fill=GREEN_DARK, width=line_thick)
+    draw.line([(x_px(33.8), 0), (x_px(33.8), h)], fill=GREEN_LIGHT, width=line_thick)
 
-    # 3. [중형 차량 사이드 & 중앙선] 주황선
-    # (중형차 폭 기준 좌/우 선 및 차량 중앙 엠블럼 수직선)
-    draw.line([(int(w * 0.23), 0), (int(w * 0.23), h)], fill=ORANGE, width=line_thick)
-    draw.line([(int(w * 0.77), 0), (int(w * 0.77), h)], fill=ORANGE, width=line_thick)
-    draw.line([(int(w * 0.48), 0), (int(w * 0.48), h)], fill=ORANGE, width=line_thick + 1) # 전면 그릴 중앙
-    draw.line([(0, int(h * 0.49)), (w, int(h * 0.49))], fill=ORANGE, width=line_thick + 1)
+    # 3. [고정] 주황색 수직/수평 중심선 (중형 차량 사이드 및 수평/수직 정중앙)
+    draw.line([(x_px(8.6), 0), (x_px(8.6), h)], fill=ORANGE, width=line_thick)        # 중형 좌
+    draw.line([(x_px(31.2), 0), (x_px(31.2), h)], fill=ORANGE, width=line_thick)      # 중형 우
+    draw.line([(x_px(19.8), 0), (x_px(19.8), h)], fill=ORANGE, width=line_thick + 1)  # 수직 중앙선
+    draw.line([(0, y_px(11.4)), (w, y_px(11.4))], fill=ORANGE, width=line_thick + 1)  # 수평 중앙선
 
-    # 4. [바퀴 바닥 접지선 & 차량 바운딩 박스] 빨간선
-    # 하단 선을 바퀴 타이어 바닥(약 78% 높이)에 정확히 맞춤
-    car_top = int(h * 0.24)      # 차량 루프랙 위치
-    car_bottom = int(h * 0.78)   # 바퀴 바닥 접지 위치
-    car_left = int(int(w * 0.17)) # 좌측 측면
-    car_right = int(int(w * 0.83))# 우측 측면
+    # 4. [고정] 빨간색 테두리 박스 & 바퀴 접지 기준선 (19.3cm)
+    draw.rectangle([x_px(4.8), y_px(0.8), x_px(35.4), y_px(21.7)], outline=RED, width=line_thick + 2)
+    draw.line([(0, y_px(19.3)), (w, y_px(19.3))], fill=RED, width=line_thick + 2)  # 타이어 하단선
 
-    # 차량 테두리 상자
-    draw.rectangle([car_left, car_top, car_right, car_bottom], outline=RED, width=line_thick + 2)
-    # 바퀴 하단 수평 접지선
-    draw.line([(0, car_bottom), (w, car_bottom)], fill=RED, width=line_thick + 2)
-
+    # 원본 이미지와 고정 가이드라인 레이어 합성
     combined = Image.alpha_composite(img, overlay)
     return combined.convert("RGB")
 
