@@ -78,7 +78,7 @@ def apply_guidelines(image_input):
     
     # 3. 빨간색 외곽 상/하단 & 타이어 접지선
     y_red_top = int(h * 0.02)       # 가이드 박스 상단
-    y_red_bottom = int(h * 0.90)    # 바퀴 하단 접지선 (타이어 바닥에 맞춤)
+    y_red_bottom = int(h * 0.95)    # 바퀴 하단 접지선 (타이어 바닥에 맞춤)
 
     # --- 선 그리기 ---
 
