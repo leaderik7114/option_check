@@ -30,8 +30,7 @@ from playwright.sync_api import sync_playwright
 
 def apply_guidelines(image_input):
     """
-    모바일 카메라 뷰파인더 내부의 실제 가이드라인 높낮이(y축)를 
-    엔카 사진 비율에 정확히 맞춰서 그리는 함수
+    스크린샷에 표시된 고정 가이드라인 규격(Fix)을 원본 사진 위에 그대로 그리는 함수.
     """
     try:
         if isinstance(image_input, str):
@@ -51,56 +50,47 @@ def apply_guidelines(image_input):
 
     w, h = img.size
 
-    # 선 두께
+    # --- [절대 고정 스케일 가이드 좌표 Fix] ---
+    SLIDE_W = 40.2
+
+    def x_px(cm): return int((cm / SLIDE_W) * w)
+
+    # y축 고정값 비율 (촬영 뷰파인더 픽셀 일치 비율)
+    Y_RED_TOP = int(h * 0.02)         # 상단 빨간 테두리
+    Y_RED_BOTTOM = int(h * 0.88)      # 하단 빨간 바퀴 접지선 (바퀴 하단부에 잘 맞춰짐)
+    Y_WHITE_TOP = int(h * 0.435)      # 상단 흰색 보조선
+    Y_WHITE_BOT = int(h * 0.565)      # 하단 흰색 보조선
+    Y_ORANGE_CENTER = int(h * 0.507)  # 수평 중앙 주황선
+
+    # 선 두께 (해상도 비례)
     line_thick = max(2, int(min(w, h) * 0.004))
 
-    # Color 정의
+    # Color 정의 (RGBA)
     RED = (235, 35, 35, 230)
     ORANGE = (245, 150, 20, 230)
     GREEN_LIGHT = (160, 210, 140, 220)
     GREEN_DARK = (80, 150, 70, 230)
     WHITE_SUB = (240, 240, 240, 180)
 
-    # ----------------------------------------------------
-    # 순수 사진 영역 기준 고정 좌표 (높낮이 정밀 보정)
-    # ----------------------------------------------------
-    
-    # [x축] 사이드/중앙 기준 (cm 스케일 유지: SLIDE_W = 40.2)
-    def x_px(cm): return int((cm / 40.2) * w)
+    # 1. 흰색 수평 구도 보조선 (Fix)
+    draw.line([(0, Y_WHITE_TOP), (w, Y_WHITE_TOP)], fill=WHITE_SUB, width=max(1, line_thick - 1))
+    draw.line([(0, Y_WHITE_BOT), (w, Y_WHITE_BOT)], fill=WHITE_SUB, width=max(1, line_thick - 1))
 
-    # [y축] 뷰파인더 안쪽 실제 높낮이 비율 (% 기준)
-    # 1. 흰색 수평 구도 보조선 (그릴 상/하단)
-    y_white_top = int(h * 0.38)     # 헤드램프/그릴 상단선
-    y_white_bot = int(h * 0.52)     # 헤드램프/그릴 하단선
-    
-    # 2. 주황색 수평 중앙선
-    y_orange_center = int(h * 0.45) # 차량 수평 중심선
-    
-    # 3. 빨간색 외곽 상/하단 & 타이어 접지선
-    y_red_top = int(h * 0.02)       # 가이드 박스 상단
-    y_red_bottom = int(h * 0.95)    # 바퀴 하단 접지선 (타이어 바닥에 맞춤)
-
-    # --- 선 그리기 ---
-
-    # 1. 흰색 수평 보조선
-    draw.line([(0, y_white_top), (w, y_white_top)], fill=WHITE_SUB, width=max(1, line_thick - 1))
-    draw.line([(0, y_white_bot), (w, y_white_bot)], fill=WHITE_SUB, width=max(1, line_thick - 1))
-
-    # 2. 초록색 수직 가이드선 (대형)
+    # 2. 초록색 수직 가이드선 (대형 차량 사이드 맞춤 Fix)
     draw.line([(x_px(5.6), 0), (x_px(5.6), h)], fill=GREEN_LIGHT, width=line_thick)
     draw.line([(x_px(6.5), 0), (x_px(6.5), h)], fill=GREEN_DARK, width=line_thick)
     draw.line([(x_px(33.1), 0), (x_px(33.1), h)], fill=GREEN_DARK, width=line_thick)
     draw.line([(x_px(33.8), 0), (x_px(33.8), h)], fill=GREEN_LIGHT, width=line_thick)
 
-    # 3. 주황색 수직/수평 가이드선 (중형 & Center)
-    draw.line([(x_px(8.6), 0), (x_px(8.6), h)], fill=ORANGE, width=line_thick)
-    draw.line([(x_px(31.2), 0), (x_px(31.2), h)], fill=ORANGE, width=line_thick)
-    draw.line([(x_px(19.8), 0), (x_px(19.8), h)], fill=ORANGE, width=line_thick + 1)  # 수직 중앙
-    draw.line([(0, y_orange_center), (w, y_orange_center)], fill=ORANGE, width=line_thick + 1) # 수평 중앙
+    # 3. 주황색 수직/수평 가이드선 (중형 차량 사이드 & 중앙선 Fix)
+    draw.line([(x_px(8.6), 0), (x_px(8.6), h)], fill=ORANGE, width=line_thick)          # 중형 좌
+    draw.line([(x_px(31.2), 0), (x_px(31.2), h)], fill=ORANGE, width=line_thick)        # 중형 우
+    draw.line([(x_px(19.8), 0), (x_px(19.8), h)], fill=ORANGE, width=line_thick + 1)    # 수직 중앙
+    draw.line([(0, Y_ORANGE_CENTER), (w, Y_ORANGE_CENTER)], fill=ORANGE, width=line_thick + 1) # 수평 중앙
 
-    # 4. 빨간색 외곽 박스 & 타이어 접지 수평선
-    draw.rectangle([x_px(4.8), y_red_top, x_px(35.4), y_red_bottom], outline=RED, width=line_thick + 2)
-    draw.line([(0, y_red_bottom), (w, y_red_bottom)], fill=RED, width=line_thick + 2) # 바퀴 하단선
+    # 4. 빨간색 외곽 테두리 & 바퀴 하단 접지선 (Fix)
+    draw.rectangle([x_px(4.8), Y_RED_TOP, x_px(35.4), Y_RED_BOTTOM], outline=RED, width=line_thick + 2)
+    draw.line([(0, Y_RED_BOTTOM), (w, Y_RED_BOTTOM)], fill=RED, width=line_thick + 2)
 
     combined = Image.alpha_composite(img, overlay)
     return combined.convert("RGB")
