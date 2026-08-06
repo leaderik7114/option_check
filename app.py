@@ -30,8 +30,8 @@ from playwright.sync_api import sync_playwright
 
 def apply_guidelines(image_input):
     """
-    크롤링된 사진 원본 크기를 변경하지 않고,
-    사진 자체의 픽셀 비율(상대 좌표)에 맞춰 정확하게 가이드라인을 합성하는 함수
+    사진 전체 테두리가 아닌, 사진 속 '차량 자체의 크기/위치'에 맞춰
+    사이드 및 바퀴 하단 가이드라인을 그리는 함수
     """
     try:
         if isinstance(image_input, str):
@@ -46,16 +46,13 @@ def apply_guidelines(image_input):
     except Exception:
         return image_input
 
-    # 가공용 투명 레이어 생성 (원본 크기 동일 유지)
     overlay = Image.new("RGBA", img.size, (255, 255, 255, 0))
     draw = ImageDraw.Draw(overlay)
 
     w, h = img.size
-
-    # 선 두께 (이미지 해상도 비례)
     line_thick = max(2, int(min(w, h) * 0.005))
 
-    # Color 정의 (RGBA)
+    # Color 정의
     RED = (235, 35, 35, 230)
     ORANGE = (245, 150, 20, 230)
     GREEN_LIGHT = (160, 210, 140, 220)
@@ -63,31 +60,39 @@ def apply_guidelines(image_input):
     WHITE_SUB = (240, 240, 240, 180)
 
     # ----------------------------------------------------
-    # 사진 원본 뷰파인더 픽셀 비율 기준 정밀 보정
+    # 사진 내부 '차량 영역' 맞춤 좌표 (차체 실측 비율)
     # ----------------------------------------------------
+    
+    # 1. 차량 전면 수평 보조선 (헤드램프 / 그릴 중앙선)
+    draw.line([(0, int(h * 0.46)), (w, int(h * 0.46))], fill=WHITE_SUB, width=max(1, line_thick - 1))
+    draw.line([(0, int(h * 0.53)), (w, int(h * 0.53))], fill=WHITE_SUB, width=max(1, line_thick - 1))
 
-    # 1. 흰색 수평 구도 보조선 (헤드램프 / 그릴 상·하단)
-    draw.line([(0, int(h * 0.43)), (w, int(h * 0.43))], fill=WHITE_SUB, width=max(1, line_thick - 1))
-    draw.line([(0, int(h * 0.57)), (w, int(h * 0.57))], fill=WHITE_SUB, width=max(1, line_thick - 1))
+    # 2. [대형 차량 사이드] 차체 좌/우 실체 끝에 맞춘 초록선
+    # (좌측 범퍼 끝: 약 18%, 우측 후면 범퍼 끝: 약 82%)
+    draw.line([(int(w * 0.18), 0), (int(w * 0.18), h)], fill=GREEN_LIGHT, width=line_thick)
+    draw.line([(int(w * 0.20), 0), (int(w * 0.20), h)], fill=GREEN_DARK, width=line_thick)
+    draw.line([(int(w * 0.80), 0), (int(w * 0.80), h)], fill=GREEN_DARK, width=line_thick)
+    draw.line([(int(w * 0.82), 0), (int(w * 0.82), h)], fill=GREEN_LIGHT, width=line_thick)
 
-    # 2. 초록색 수직 가이드선 (대형 차량 범퍼 양끝 맞춤)
-    draw.line([(int(w * 0.05), 0), (int(w * 0.05), h)], fill=GREEN_LIGHT, width=line_thick)
-    draw.line([(int(w * 0.08), 0), (int(w * 0.08), h)], fill=GREEN_DARK, width=line_thick)
-    draw.line([(int(w * 0.92), 0), (int(w * 0.92), h)], fill=GREEN_DARK, width=line_thick)
-    draw.line([(int(w * 0.95), 0), (int(w * 0.95), h)], fill=GREEN_LIGHT, width=line_thick)
+    # 3. [중형 차량 사이드 & 중앙선] 주황선
+    # (중형차 폭 기준 좌/우 선 및 차량 중앙 엠블럼 수직선)
+    draw.line([(int(w * 0.23), 0), (int(w * 0.23), h)], fill=ORANGE, width=line_thick)
+    draw.line([(int(w * 0.77), 0), (int(w * 0.77), h)], fill=ORANGE, width=line_thick)
+    draw.line([(int(w * 0.48), 0), (int(w * 0.48), h)], fill=ORANGE, width=line_thick + 1) # 전면 그릴 중앙
+    draw.line([(0, int(h * 0.49)), (w, int(h * 0.49))], fill=ORANGE, width=line_thick + 1)
 
-    # 3. 주황색 수직/수평 가이드선 (중형 차량 맞춤 및 정중앙)
-    draw.line([(int(w * 0.16), 0), (int(w * 0.16), h)], fill=ORANGE, width=line_thick)
-    draw.line([(int(w * 0.84), 0), (int(w * 0.84), h)], fill=ORANGE, width=line_thick)
-    draw.line([(int(w * 0.50), 0), (int(w * 0.50), h)], fill=ORANGE, width=line_thick + 1)  # 차량 정중앙 수직선
-    draw.line([(0, int(h * 0.50)), (w, int(h * 0.50))], fill=ORANGE, width=line_thick + 1)  # 차량 정중앙 수평선
+    # 4. [바퀴 바닥 접지선 & 차량 바운딩 박스] 빨간선
+    # 하단 선을 바퀴 타이어 바닥(약 78% 높이)에 정확히 맞춤
+    car_top = int(h * 0.24)      # 차량 루프랙 위치
+    car_bottom = int(h * 0.78)   # 바퀴 바닥 접지 위치
+    car_left = int(int(w * 0.17)) # 좌측 측면
+    car_right = int(int(w * 0.83))# 우측 측면
 
-    # 4. 빨간색 외곽 테두리 및 바퀴 바닥 접지선
-    # 하단 89% 지점이 타이어 접지선에 정확히 맞춰집니다.
-    draw.rectangle([int(w * 0.02), int(h * 0.02), int(w * 0.98), int(h * 0.98)], outline=RED, width=line_thick + 2)
-    draw.line([(0, int(h * 0.89)), (w, int(h * 0.89))], fill=RED, width=line_thick + 2)
+    # 차량 테두리 상자
+    draw.rectangle([car_left, car_top, car_right, car_bottom], outline=RED, width=line_thick + 2)
+    # 바퀴 하단 수평 접지선
+    draw.line([(0, car_bottom), (w, car_bottom)], fill=RED, width=line_thick + 2)
 
-    # 원본 이미지와 가이드라인 레이어 합성
     combined = Image.alpha_composite(img, overlay)
     return combined.convert("RGB")
 
