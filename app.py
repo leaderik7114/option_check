@@ -6,14 +6,13 @@ import subprocess
 import sys
 import time
 import requests
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageOps
 import streamlit as st
 
-# --- [수정] --with-deps 제거 (packages.txt로 대체) ---
+# --- Streamlit Cloud Playwright 브라우저 설치 ---
 @st.cache_resource
 def install_playwright_browsers():
     try:
-        # --with-deps 옵션을 제거하고 pure chromium 브라우저만 설치
         subprocess.run(
             [sys.executable, "-m", "playwright", "install", "chromium"],
             check=True
@@ -31,7 +30,7 @@ from playwright.sync_api import sync_playwright
 
 def apply_guidelines(image_input):
     """
-    이미지에 슬라이드 가이드라인(실제 화면 픽셀 비교 보정 완료)을 그리는 함수
+    이미지를 슬라이드 비율(40.2cm x 22.5cm)로 맞춘 후 보정된 가이드라인을 그리는 함수
     """
     try:
         if isinstance(image_input, str):
@@ -40,27 +39,36 @@ def apply_guidelines(image_input):
             }
             response = requests.get(image_input, headers=headers, timeout=10)
             response.raise_for_status()
-            img = Image.open(io.BytesIO(response.content)).convert("RGBA")
+            raw_img = Image.open(io.BytesIO(response.content)).convert("RGBA")
         else:
-            img = image_input.convert("RGBA")
-    except Exception as e:
+            raw_img = image_input.convert("RGBA")
+    except Exception:
         return image_input
 
+    # 1. 캔버스 해상도 설정 (슬라이드 비율 40.2 : 22.5 = 약 16:8.95 에 맞춘 고해상도 캔버스)
+    # 40.2cm x 22.5cm 비율에 맞게 기준 해상도(예: 1930 x 1080) 생성
+    CANVAS_W = 1930
+    CANVAS_H = 1080
+
+    # 원본 이미지를 슬라이드 영역에 딱 맞게 비율 유지하며 중앙 조절 (Fit/Crop 선택 가능)
+    # ImageOps.fit을 사용해 캔버스 채우기
+    img = ImageOps.fit(raw_img, (CANVAS_W, CANVAS_H), Image.Resampling.LANCZOS)
+
     # 가공용 투명 레이어 생성
-    overlay = Image.new("RGBA", img.size, (255, 255, 255, 0))
+    overlay = Image.new("RGBA", (CANVAS_W, CANVAS_H), (255, 255, 255, 0))
     draw = ImageDraw.Draw(overlay)
 
-    w, h = img.size
+    w, h = CANVAS_W, CANVAS_H
 
-    # Slide 기준 크기 (40.2cm x 22.5cm) 대비 비율 좌표 변환
+    # Slide 기준 크기 (40.2cm x 22.5cm)
     SLIDE_W = 40.2
     SLIDE_H = 22.5
 
     def x_px(cm): return int((cm / SLIDE_W) * w)
     def y_px(cm): return int((cm / SLIDE_H) * h)
 
-    # 선 두께 (이미지 해상도에 비례)
-    line_thick = max(2, int(min(w, h) * 0.005))
+    # 선 두께
+    line_thick = max(2, int(min(w, h) * 0.004))
 
     # Color 정의 (RGBA)
     RED = (235, 30, 30, 230)
@@ -69,7 +77,7 @@ def apply_guidelines(image_input):
     GREEN_DARK = (80, 150, 70, 230)
     PINK = (230, 180, 200, 220)
 
-    # 1. 초록색 수직 가이드선 (보정: 5.7cm, 6.3cm / 33.1cm, 33.7cm)
+    # 1. 초록색 수직 가이드선 (5.7cm, 6.3cm / 33.1cm, 33.7cm)
     draw.line([(x_px(5.7), 0), (x_px(5.7), h)], fill=GREEN_LIGHT, width=line_thick)
     draw.line([(x_px(6.3), 0), (x_px(6.3), h)], fill=GREEN_DARK, width=line_thick)
     draw.line([(x_px(33.1), 0), (x_px(33.1), h)], fill=GREEN_DARK, width=line_thick)
@@ -79,11 +87,11 @@ def apply_guidelines(image_input):
     draw.line([(0, y_px(10.2)), (w, y_px(10.2))], fill=PINK, width=line_thick)
     draw.line([(0, y_px(13.0)), (w, y_px(13.0))], fill=PINK, width=line_thick)
 
-    # 3. 주황색 중심선 (수직 중심 보정: 19.8cm / 수평 중심: 11.6cm)
+    # 3. 주황색 중심선 (수직 중심: 19.8cm / 수평 중심: 11.6cm)
     draw.line([(x_px(19.8), 0), (x_px(19.8), h)], fill=ORANGE, width=line_thick + 1)
     draw.line([(0, y_px(11.6)), (w, y_px(11.6))], fill=ORANGE, width=line_thick + 1)
 
-    # 4. 빨간색 박스 및 하단 구분선 (외곽 영역 보정: 4.8cm ~ 35.4cm)
+    # 4. 빨간색 박스 및 하단 구분선 (외곽 영역: 4.8cm ~ 35.4cm)
     draw.rectangle([x_px(4.8), y_px(0.8), x_px(35.4), y_px(22.5)], outline=RED, width=line_thick + 2)
     draw.line([(0, y_px(20.3)), (w, y_px(20.3))], fill=RED, width=line_thick + 2)
 
@@ -148,7 +156,6 @@ if st.button("조회하기", type="primary", use_container_width=True):
                                 args=["--no-sandbox", "--disable-dev-shm-usage"]
                             )
                         except Exception:
-                            # 브라우저 실행 예외 시 재설치 시도 (동일하게 --with-deps 제거)
                             subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"], check=True)
                             browser = p.chromium.launch(
                                 headless=True,
